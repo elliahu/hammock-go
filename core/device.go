@@ -180,3 +180,74 @@ func CreateDevice(
 func DestroyDevice(device vulkan.Device) {
 	vulkan.DestroyDevice(device, nil)
 }
+
+func PickSupportedFormat(physicalDevice vulkan.PhysicalDevice, candidates []vulkan.Format, tiling vulkan.ImageTiling, features vulkan.FormatFeatureFlags) (vulkan.Format, error) {
+	for _, format := range candidates {
+		var props vulkan.FormatProperties
+		vulkan.GetPhysicalDeviceFormatProperties(physicalDevice, format, &props)
+
+		if tiling == vulkan.ImageTilingLinear && (props.LinearTilingFeatures&features) == features {
+			return format, nil
+		}
+		if tiling == vulkan.ImageTilingOptimal && (props.OptimalTilingFeatures&features) == features {
+			return format, nil
+		}
+	}
+
+	return vulkan.FormatUndefined, fmt.Errorf("failed to find supported format")
+}
+
+func FindMemoryType(physicalDevice vulkan.PhysicalDevice, typeFilter uint32, properties vulkan.MemoryPropertyFlags) (uint32, error) {
+	var memProperties vulkan.PhysicalDeviceMemoryProperties
+	vulkan.GetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties)
+	for i := uint32(0); i < memProperties.MemoryTypeCount; i++ {
+		if (typeFilter&(1<<i)) != 0 && (memProperties.MemoryTypes[i].PropertyFlags&properties) == properties {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("failed to find suitable memory type")
+}
+
+func CreateCommandPools(
+	device vulkan.Device,
+	graphicsQueueFamilyIndex QueueFamilyIndex,
+	computeQueueFamilyIndex QueueFamilyIndex,
+	transferQueueFamilyIndex QueueFamilyIndex) (vulkan.CommandPool, vulkan.CommandPool, vulkan.CommandPool, error) {
+
+	commandPoolCreateInfo := vulkan.CommandPoolCreateInfo{
+		SType:            vulkan.StructureTypeCommandPoolCreateInfo,
+		Flags:            vulkan.CommandPoolCreateFlags(vulkan.CommandPoolCreateResetCommandBufferBit | vulkan.CommandPoolCreateTransientBit),
+		QueueFamilyIndex: graphicsQueueFamilyIndex.index,
+	}
+
+	var graphicsCommandPool vulkan.CommandPool = vulkan.NullCommandPool
+	var computeCommandPool vulkan.CommandPool = vulkan.NullCommandPool
+	var transferCommandPool vulkan.CommandPool = vulkan.NullCommandPool
+
+	res := vulkan.CreateCommandPool(device, &commandPoolCreateInfo, nil, &graphicsCommandPool)
+	if res != vulkan.Success {
+		return vulkan.NullCommandPool, vulkan.NullCommandPool, vulkan.NullCommandPool, fmt.Errorf("failed to create graphics command pool: %v", res)
+	}
+
+	commandPoolCreateInfo.QueueFamilyIndex = computeQueueFamilyIndex.index
+	commandPoolCreateInfo.Flags = vulkan.CommandPoolCreateFlags(vulkan.CommandPoolCreateResetCommandBufferBit)
+
+	res = vulkan.CreateCommandPool(device, &commandPoolCreateInfo, nil, &computeCommandPool)
+	if res != vulkan.Success {
+		return vulkan.NullCommandPool, vulkan.NullCommandPool, vulkan.NullCommandPool, fmt.Errorf("failed to create compute command pool: %v", res)
+	}
+
+	commandPoolCreateInfo.QueueFamilyIndex = transferQueueFamilyIndex.index
+	res = vulkan.CreateCommandPool(device, &commandPoolCreateInfo, nil, &transferCommandPool)
+	if res != vulkan.Success {
+		return vulkan.NullCommandPool, vulkan.NullCommandPool, vulkan.NullCommandPool, fmt.Errorf("failed to create transfer command pool: %v", res)
+	}
+
+	return graphicsCommandPool, computeCommandPool, transferCommandPool, nil
+}
+
+func DestroyCommandPools(device vulkan.Device, graphicsCommandPool vulkan.CommandPool, computeCommandPool vulkan.CommandPool, transferCommandPool vulkan.CommandPool) {
+	vulkan.DestroyCommandPool(device, graphicsCommandPool, nil)
+	vulkan.DestroyCommandPool(device, computeCommandPool, nil)
+	vulkan.DestroyCommandPool(device, transferCommandPool, nil)
+}
