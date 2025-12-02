@@ -4,50 +4,35 @@ import (
 	"github.com/vulkan-go/vulkan"
 )
 
+// Vulkan context
 type Context struct {
-	surface                  vulkan.Surface
-	instance                 vulkan.Instance
-	debugCallback            vulkan.DebugReportCallback
-	physicalDevice           vulkan.PhysicalDevice
-	device                   vulkan.Device
-	presentQueueFamilyIndex  QueueFamilyIndex
-	graphicsQueueFamilyIndex QueueFamilyIndex
-	computeQueueFamilyIndex  QueueFamilyIndex
-	transferQueueFamilyIndex QueueFamilyIndex
-	graphicsCommandPool      vulkan.CommandPool
-	computeCommandPool       vulkan.CommandPool
-	transferCommandPool      vulkan.CommandPool
-	presentQueue             vulkan.Queue
-	graphicsQueue            vulkan.Queue
-	computeQueue             vulkan.Queue
-	transferQueue            vulkan.Queue
+	surface                  vulkan.Surface // Vulkan rendering surface (may be nil for headless mode)
+	instance                 *Instance
+	physicalDevice           vulkan.PhysicalDevice // Physical device
+	device                   vulkan.Device         // Logical vulkan device
+	presentQueueFamilyIndex  QueueFamilyIndex      // Present queue family index
+	graphicsQueueFamilyIndex QueueFamilyIndex      // Graphics queue family index
+	computeQueueFamilyIndex  QueueFamilyIndex      // Compute queue family index
+	transferQueueFamilyIndex QueueFamilyIndex      // Transfer queue family index
+	graphicsCommandPool      vulkan.CommandPool    // Graphics command pool
+	computeCommandPool       vulkan.CommandPool    // Compute command pool
+	transferCommandPool      vulkan.CommandPool    // Transfer command pool
+	presentQueue             vulkan.Queue          // Present queue
+	graphicsQueue            vulkan.Queue          // Graphics queue
+	computeQueue             vulkan.Queue          // Compute queue
+	transferQueue            vulkan.Queue          // Transfer queue
 }
 
-func CreateContext(surface vulkan.Surface) (*Context, error) {
+func CreateContext(instance *Instance, surface vulkan.Surface) (*Context, error) {
 	// First set the surface
 	ctx := &Context{}
 	ctx.surface = surface
-
-	// Create Vulkan instance
-	instance, err := CreateInstance()
-	if err != nil {
-		return ctx, err
-	}
-
 	ctx.instance = instance
 
-	// Create debug messenger
-	debugCallback, err := CreateDebugCallback(instance)
-	if err != nil {
-		return ctx, err
-	}
-
-	ctx.debugCallback = debugCallback
-
 	// Create physical device
-	physicalDevice, err := PickPhysicalDevice(instance)
+	physicalDevice, err := PickPhysicalDevice(ctx.instance.instance)
 	if err != nil {
-		return ctx, err
+		return nil, err
 	}
 	ctx.physicalDevice = physicalDevice
 
@@ -61,7 +46,7 @@ func CreateContext(surface vulkan.Surface) (*Context, error) {
 	device, presentQueue, graphicsQueue, computeQueue, transferQueue, err := CreateDevice(physicalDevice, ctx.presentQueueFamilyIndex,
 		ctx.graphicsQueueFamilyIndex, ctx.computeQueueFamilyIndex, ctx.transferQueueFamilyIndex)
 	if err != nil {
-		return ctx, err
+		return nil, err
 	}
 
 	ctx.device = device
@@ -74,7 +59,7 @@ func CreateContext(surface vulkan.Surface) (*Context, error) {
 	graphicsCommandPool, computeCommandPool, transferCommandPool, err := CreateCommandPools(device, ctx.graphicsQueueFamilyIndex,
 		ctx.computeQueueFamilyIndex, ctx.transferQueueFamilyIndex)
 	if err != nil {
-		return ctx, err
+		return nil, err
 	}
 
 	ctx.graphicsCommandPool = graphicsCommandPool
@@ -84,9 +69,9 @@ func CreateContext(surface vulkan.Surface) (*Context, error) {
 	return ctx, nil
 }
 
+// Destroy Vulkan context
 func (ctx *Context) Destroy() {
 	DestroyCommandPools(ctx.device, ctx.graphicsCommandPool, ctx.computeCommandPool, ctx.transferCommandPool)
 	DestroyDevice(ctx.device)
-	DestroyDebugCallback(ctx.instance, ctx.debugCallback)
-	DestroyInstance(ctx.instance)
+	ctx.instance.Destroy()
 }

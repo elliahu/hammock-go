@@ -8,6 +8,15 @@ import (
 	"github.com/vulkan-go/vulkan"
 )
 
+type Instance struct {
+	instance      vulkan.Instance
+	debugCallback vulkan.DebugReportCallback
+}
+
+func (i *Instance) Instance() vulkan.Instance {
+	return i.instance
+}
+
 // Debug callback function using the older DebugReport API
 func debugCallback(
 	flags vulkan.DebugReportFlags,
@@ -42,7 +51,8 @@ func debugCallback(
 	return vulkan.False
 }
 
-func CreateDebugCallback(instance vulkan.Instance) (vulkan.DebugReportCallback, error) {
+// Creates a debug callback object that is used as a messenger
+func createDebugCallback(instance vulkan.Instance) (vulkan.DebugReportCallback, error) {
 	createInfo := vulkan.DebugReportCallbackCreateInfo{
 		SType: vulkan.StructureTypeDebugReportCallbackCreateInfo,
 		Flags: vulkan.DebugReportFlags(
@@ -62,11 +72,17 @@ func CreateDebugCallback(instance vulkan.Instance) (vulkan.DebugReportCallback, 
 	return debugCallback, nil
 }
 
-func DestroyDebugCallback(instance vulkan.Instance, callback vulkan.DebugReportCallback) {
-	vulkan.DestroyDebugReportCallback(instance, callback, nil)
+// Destroys debug callback
+func destroyDebugCallback(instance vulkan.Instance, callback vulkan.DebugReportCallback) {
+	if callback != vulkan.NullDebugReportCallback {
+		vulkan.DestroyDebugReportCallback(instance, callback, nil)
+	}
 }
 
-func CreateInstance() (vulkan.Instance, error) {
+// Creates Vulkan instance along with required instance extensions and layers.
+// TODO make validation layers optional
+// TODO use surface based on OS
+func createInstance() (vulkan.Instance, error) {
 	// Load Vulkan library
 	if err := vulkan.SetDefaultGetInstanceProcAddr(); err != nil {
 		return nil, fmt.Errorf("failed to load Vulkan: %w", err)
@@ -85,12 +101,14 @@ func CreateInstance() (vulkan.Instance, error) {
 		ApiVersion:         vulkan.ApiVersion10,
 	}
 
+	// Extensions in use
 	extensions := []string{
 		"VK_KHR_surface\x00",
 		"VK_KHR_win32_surface\x00",
 		"VK_EXT_debug_report\x00",
 	}
 
+	// Validation layers
 	layers := []string{
 		"VK_LAYER_KHRONOS_validation\x00",
 	}
@@ -104,17 +122,49 @@ func CreateInstance() (vulkan.Instance, error) {
 		PpEnabledLayerNames:     layers,
 	}
 
+	// Create the actual instance
 	var instance vulkan.Instance
 	res := vulkan.CreateInstance(&instanceCreateInfo, nil, &instance)
 	if res != vulkan.Success {
 		return nil, fmt.Errorf("failed to create Vulkan instance: %v", res)
 	}
 
+	// This is needed on MoltenVk
 	vulkan.InitInstance(instance)
 
 	return instance, nil
 }
 
-func DestroyInstance(instance vulkan.Instance) {
-	vulkan.DestroyInstance(instance, nil)
+// Destroy Vulkan instance
+func destroyInstance(instance vulkan.Instance) {
+	if instance != nil {
+		vulkan.DestroyInstance(instance, nil)
+	}
+}
+
+func CreateInstance() (*Instance, error) {
+	vulkanInstance := &Instance{}
+
+	// Create Vulkan instance
+	instance, err := createInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	vulkanInstance.instance = instance
+
+	// Create debug messenger
+	debugCallback, err := createDebugCallback(instance)
+	if err != nil {
+		return nil, err
+	}
+
+	vulkanInstance.debugCallback = debugCallback
+
+	return vulkanInstance, nil
+}
+
+func (inst *Instance) Destroy() {
+	destroyDebugCallback(inst.instance, inst.debugCallback)
+	destroyInstance(inst.instance)
 }

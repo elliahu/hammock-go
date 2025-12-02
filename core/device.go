@@ -6,11 +6,13 @@ import (
 	"github.com/vulkan-go/vulkan"
 )
 
+// QueueFamilyIndex is used to group existence of queue family and its index
 type QueueFamilyIndex struct {
 	hasValue bool
 	index    uint32
 }
 
+// Picks an available physical device (GPU)
 func PickPhysicalDevice(instance vulkan.Instance) (vulkan.PhysicalDevice, error) {
 	var deviceCount uint32
 	vulkan.EnumeratePhysicalDevices(instance, &deviceCount, nil)
@@ -42,6 +44,7 @@ func FindQueueFamilies(physicalDevice vulkan.PhysicalDevice, surface vulkan.Surf
 	queueFamilies := make([]vulkan.QueueFamilyProperties, queueFamilyCount)
 	vulkan.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies)
 
+	// Don't have value by default
 	presentQueueFamilyIndex := QueueFamilyIndex{hasValue: false}
 	graphicsQueueFamilyIndex := QueueFamilyIndex{hasValue: false}
 	computeQueueFamilyIndex := QueueFamilyIndex{hasValue: false}
@@ -69,8 +72,8 @@ func FindQueueFamilies(physicalDevice vulkan.PhysicalDevice, surface vulkan.Surf
 		}
 
 		var presentSupport vulkan.Bool32 = vulkan.False
-		if surface != nil {
-			vulkan.GetPhysicalDeviceSurfaceSupport(physicalDevice, uint32(i), nil, &presentSupport)
+		if surface != vulkan.NullSurface {
+			vulkan.GetPhysicalDeviceSurfaceSupport(physicalDevice, uint32(i), surface, &presentSupport)
 			if presentSupport == vulkan.True {
 				presentQueueFamilyIndex = QueueFamilyIndex{hasValue: true, index: uint32(i)}
 			}
@@ -97,6 +100,7 @@ func FindQueueFamilies(physicalDevice vulkan.PhysicalDevice, surface vulkan.Surf
 	return presentQueueFamilyIndex, graphicsQueueFamilyIndex, computeQueueFamilyIndex, transferQueueFamilyIndex
 }
 
+// Creates a logical vulkan device
 func CreateDevice(
 	physicalDevice vulkan.PhysicalDevice,
 	presentQueueFamilyIndex QueueFamilyIndex,
@@ -136,6 +140,7 @@ func CreateDevice(
 	// Device extensions
 	deviceExtensions := []string{
 		"VK_KHR_swapchain\x00",
+		"VK_KHR_synchronization2\x00",
 	}
 
 	// Basic device features
@@ -177,10 +182,12 @@ func CreateDevice(
 	return device, presentQueue, graphicsQueue, computeQueue, transferQueue, nil
 }
 
+// Destroy logical device
 func DestroyDevice(device vulkan.Device) {
 	vulkan.DestroyDevice(device, nil)
 }
 
+// From list of candidate formats, this function picks first supported one
 func PickSupportedFormat(physicalDevice vulkan.PhysicalDevice, candidates []vulkan.Format, tiling vulkan.ImageTiling, features vulkan.FormatFeatureFlags) (vulkan.Format, error) {
 	for _, format := range candidates {
 		var props vulkan.FormatProperties
@@ -197,6 +204,7 @@ func PickSupportedFormat(physicalDevice vulkan.PhysicalDevice, candidates []vulk
 	return vulkan.FormatUndefined, fmt.Errorf("failed to find supported format")
 }
 
+// Find memory type that supports required properties
 func FindMemoryType(physicalDevice vulkan.PhysicalDevice, typeFilter uint32, properties vulkan.MemoryPropertyFlags) (uint32, error) {
 	var memProperties vulkan.PhysicalDeviceMemoryProperties
 	vulkan.GetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties)
@@ -208,6 +216,7 @@ func FindMemoryType(physicalDevice vulkan.PhysicalDevice, typeFilter uint32, pro
 	return 0, fmt.Errorf("failed to find suitable memory type")
 }
 
+// Create command pool for each queue in this order: graphics, compute, transfer
 func CreateCommandPools(
 	device vulkan.Device,
 	graphicsQueueFamilyIndex QueueFamilyIndex,
@@ -246,6 +255,7 @@ func CreateCommandPools(
 	return graphicsCommandPool, computeCommandPool, transferCommandPool, nil
 }
 
+// Destroy command pools for queue families
 func DestroyCommandPools(device vulkan.Device, graphicsCommandPool vulkan.CommandPool, computeCommandPool vulkan.CommandPool, transferCommandPool vulkan.CommandPool) {
 	vulkan.DestroyCommandPool(device, graphicsCommandPool, nil)
 	vulkan.DestroyCommandPool(device, computeCommandPool, nil)
