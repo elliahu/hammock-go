@@ -7,8 +7,6 @@ import (
 	"github.com/bbredesen/go-vk"
 )
 
-// TODO remove glfw dependency
-
 type Editor struct {
 	window    Window
 	surface   vk.SurfaceKHR
