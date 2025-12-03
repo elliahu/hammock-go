@@ -10,6 +10,7 @@ import (
 // TODO remove glfw dependency
 
 type Editor struct {
+	window    Window
 	surface   vk.SurfaceKHR
 	instance  vk.Instance
 	context   core.Context
@@ -21,29 +22,6 @@ func (edit *Editor) mainLoop() {
 
 }
 
-func createWindowAndSurface(edit *Editor) error {
-	// Create window
-	hInstance, hwnd, err := CreateWin32Window("HammockGo Editor", 1920, 1080)
-	if err != nil {
-		return err
-	}
-
-	// Create surface
-	surfaceInfo := vk.Win32SurfaceCreateInfoKHR{
-		Hinstance: hInstance,
-		Hwnd:      hwnd,
-	}
-
-	surface, err := vk.CreateWin32SurfaceKHR(edit.instance, &surfaceInfo, nil)
-	if err != nil {
-		return err
-	}
-
-	edit.surface = surface
-
-	return nil
-}
-
 func (editor *Editor) Create() error {
 
 	// Create instance
@@ -53,11 +31,21 @@ func (editor *Editor) Create() error {
 	}
 	editor.instance = instance
 
-	// Create window and surface
-	err = createWindowAndSurface(editor)
+	// Create window
+	window, err := CreateWindow("HammockGo Editor", 1920, 1080)
 	if err != nil {
 		return err
 	}
+
+	editor.window = window
+
+	// Create surface
+	surface, err := window.CreateSurface(editor.instance)
+	if err != nil {
+		return err
+	}
+
+	editor.surface = surface
 
 	// Create context
 	editor.context, err = core.CreateContext(editor.instance, editor.surface)
@@ -75,7 +63,10 @@ func (editor *Editor) Create() error {
 }
 
 func (edit *Editor) Run() {
-	Win32Loop()
+	for !edit.window.ShouldClose() {
+		edit.mainLoop()
+		edit.window.PollEvents()
+	}
 }
 
 func (edit *Editor) Destroy() {

@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/bbredesen/go-vk"
 	"golang.org/x/sys/windows"
 )
 
@@ -168,23 +169,23 @@ func wndProc(hwnd syscall.Handle, msg uint32, wparam, lparam uintptr) uintptr {
 	return defWindowProc(hwnd, msg, wparam, lparam)
 }
 
-func CreateWin32Window(title string, width uint32, height uint32) (windows.Handle, windows.HWND, error) {
+func createWin32WindowInternal(title string, width uint32, height uint32) (syscall.Handle, syscall.Handle, error) {
 	// Get module handle
 	hInstance, err := getModuleHandle()
 	if err != nil {
-		panic(fmt.Sprintf("GetModuleHandle failed: %v", err))
+		return 0, 0, fmt.Errorf("GetModuleHandle failed: %v", err)
 	}
 
 	// Convert class name to UTF16
 	className, err := syscall.UTF16PtrFromString("MyWindowClass")
 	if err != nil {
-		panic(err)
+		return 0, 0, err
 	}
 
 	// Load cursor
 	cursor, err := loadCursor(0, IDC_ARROW)
 	if err != nil {
-		panic(fmt.Sprintf("LoadCursor failed: %v", err))
+		return 0, 0, fmt.Errorf("LoadCursor failed: %v", err)
 	}
 
 	// Create callback and keep it alive
@@ -203,13 +204,13 @@ func CreateWin32Window(title string, width uint32, height uint32) (windows.Handl
 
 	_, err = registerClassEx(&wndClass)
 	if err != nil {
-		panic(fmt.Sprintf("RegisterClassEx failed: %v", err))
+		return 0, 0, fmt.Errorf("RegisterClassEx failed: %v", err)
 	}
 
 	// Convert window title to UTF16
 	windowName, err := syscall.UTF16PtrFromString(title)
 	if err != nil {
-		panic(err)
+		return 0, 0, err
 	}
 
 	// Create window
@@ -226,16 +227,73 @@ func CreateWin32Window(title string, width uint32, height uint32) (windows.Handl
 		hInstance,
 	)
 	if err != nil {
-		panic(fmt.Sprintf("CreateWindowEx failed: %v", err))
+		return 0, 0, fmt.Errorf("CreateWindowEx failed: %v", err)
 	}
 
 	// Show and update window
 	showWindow(hwnd, SW_SHOW)
 	updateWindow(hwnd)
 
-	fmt.Println("Window created successfully!")
+	return hwnd, hInstance, nil
+}
 
-	return windows.Handle(hInstance), windows.HWND(hwnd), nil
+func CreateWindow(title string, width uint32, height uint32) (Window, error) {
+	hwnd, hinstance, err := createWin32WindowInternal(title, width, height)
+	if err != nil {
+		return Window{}, err
+	}
+	return Window{
+		hwnd:        windows.HWND(hwnd),
+		hinstance:   windows.Handle(hinstance),
+		shouldClose: false,
+	}, nil
+}
+
+type Window struct {
+	hwnd        windows.HWND
+	hinstance   windows.Handle
+	shouldClose bool
+}
+
+func NewWindow(hwnd windows.HWND) *Window {
+	return &Window{
+		hwnd:        hwnd,
+		shouldClose: false,
+	}
+}
+
+func (w *Window) CreateSurface(instance vk.Instance) (vk.SurfaceKHR, error) {
+	surfaceInfo := vk.Win32SurfaceCreateInfoKHR{
+		Hinstance: w.hinstance,
+		Hwnd:      w.hwnd,
+	}
+
+	surface, err := vk.CreateWin32SurfaceKHR(instance, &surfaceInfo, nil)
+	if err != nil {
+		return vk.SurfaceKHR(vk.NULL_HANDLE), err
+	}
+
+	return surface, nil
+}
+
+func (w *Window) ShouldClose() bool {
+	return w.shouldClose
+}
+
+func (w *Window) PollEvents() error {
+	var msg MSG
+	ret, err := getMessage(&msg, 0, 0, 0)
+	if err != nil {
+		return fmt.Errorf("GetMessage failed: %v", err)
+	}
+	if !ret {
+		w.shouldClose = true
+		return nil
+	}
+
+	translateMessage(&msg)
+	dispatchMessage(&msg)
+	return nil
 }
 
 func Win32Loop() error {
