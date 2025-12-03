@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/vulkan-go/vulkan"
+	"github.com/bbredesen/go-vk"
 )
 
 type SwapChain struct {
-	surfaceFormat vulkan.SurfaceFormat
-	swapChain     vulkan.Swapchain
-	device        vulkan.Device
-	images        []vulkan.Image
-	views         []vulkan.ImageView
+	surfaceFormat vk.SurfaceFormatKHR
+	swapChain     vk.SwapchainKHR
+	device        vk.Device
+	images        []vk.Image
+	views         []vk.ImageView
 }
 
 func (sc *SwapChain) Create(
-	instance vulkan.Instance,
-	physicalDevice vulkan.PhysicalDevice,
-	surface vulkan.Surface,
-	device vulkan.Device,
+	instance vk.Instance,
+	physicalDevice vk.PhysicalDevice,
+	surface vk.SurfaceKHR,
+	device vk.Device,
 	width uint32, height uint32,
 	vSync bool) error {
 	// Store old swapchain handle
@@ -27,19 +27,12 @@ func (sc *SwapChain) Create(
 	sc.device = device
 
 	// Get physical device surface properties and formats
-	surfaceCaps := vulkan.SurfaceCapabilities{}
-	res := vulkan.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, surface, &surfaceCaps)
-	if res != vulkan.Success {
+	surfaceCaps, err := vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface)
+	if err != nil {
 		return fmt.Errorf("failed to get physical device surface capabilities")
 	}
 
-	// Explicitly copy C memory back to Go struct
-	surfaceCaps.Deref()
-	surfaceCaps.CurrentExtent.Deref()
-	surfaceCaps.MinImageExtent.Deref()
-	surfaceCaps.MaxImageExtent.Deref()
-
-	var swapchainExtent vulkan.Extent2D
+	var swapchainExtent vk.Extent2D
 	// If width (and height) equals the special value 0xFFFFFFFF, the size of the surface will be set by the swapchain
 	if surfaceCaps.CurrentExtent.Width == uint32(^uint32(0)) {
 		swapchainExtent.Width = width
@@ -49,33 +42,26 @@ func (sc *SwapChain) Create(
 		swapchainExtent = surfaceCaps.CurrentExtent
 	}
 
-	var presentModeCount uint32
-	res = vulkan.GetPhysicalDeviceSurfacePresentModes(physicalDevice, surface, &presentModeCount, nil)
-	if res != vulkan.Success || presentModeCount == 0 {
-		return fmt.Errorf("failed to get present mode count")
-	}
-
-	presentModes := make([]vulkan.PresentMode, presentModeCount)
-	res = vulkan.GetPhysicalDeviceSurfacePresentModes(physicalDevice, surface, &presentModeCount, presentModes)
-	if res != vulkan.Success {
-		return fmt.Errorf("failed to get present modes")
+	presentModes, err := vk.GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface)
+	if err != nil {
+		return fmt.Errorf("failed to get physical device surface present modes")
 	}
 
 	// The VK_PRESENT_MODE_FIFO_KHR mode must always be present as per spec
 	// This mode waits for the vertical blank ("v-sync")
-	var swapchainPresentMode vulkan.PresentMode = vulkan.PresentModeFifo
+	var swapchainPresentMode vk.PresentModeKHR = vk.PRESENT_MODE_FIFO_KHR
 
 	// If v-sync is not requested, try to find a mailbox mode
 	// It's the lowest latency non-tearing present mode available
 	if !vSync {
-		for i := range presentModeCount {
-			if presentModes[i] == vulkan.PresentModeMailbox {
-				swapchainPresentMode = vulkan.PresentModeMailbox
+		for i := range len(presentModes) {
+			if presentModes[i] == vk.PRESENT_MODE_MAILBOX_KHR {
+				swapchainPresentMode = vk.PRESENT_MODE_MAILBOX_KHR
 				break
 			}
 
-			if presentModes[i] == vulkan.PresentModeImmediate {
-				swapchainPresentMode = vulkan.PresentModeImmediate
+			if presentModes[i] == vk.PRESENT_MODE_IMMEDIATE_KHR {
+				swapchainPresentMode = vk.PRESENT_MODE_IMMEDIATE_KHR
 			}
 		}
 	}
@@ -87,49 +73,42 @@ func (sc *SwapChain) Create(
 	}
 
 	// Find the transformation of the surface
-	var preTransform vulkan.SurfaceTransformFlagBits
-	if (surfaceCaps.SupportedTransforms & vulkan.SurfaceTransformFlags(vulkan.SurfaceTransformIdentityBit)) != 0 {
-		preTransform = vulkan.SurfaceTransformIdentityBit
+	var preTransform vk.SurfaceTransformFlagBitsKHR
+	if (surfaceCaps.SupportedTransforms & vk.SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0 {
+		preTransform = vk.SURFACE_TRANSFORM_IDENTITY_BIT_KHR
 	} else {
 		preTransform = surfaceCaps.CurrentTransform
 	}
 
 	// Find a supported composite alpha format (not all devices support alpha opaque)
-	compositeAlpha := vulkan.CompositeAlphaFlagBits(vulkan.CompositeAlphaOpaqueBit)
+	compositeAlpha := vk.COMPOSITE_ALPHA_OPAQUE_BIT_KHR
 	// Simply select the first composite alpha format available
-	compositeAlphaFlags := []vulkan.CompositeAlphaFlagBits{
-		vulkan.CompositeAlphaOpaqueBit,
-		vulkan.CompositeAlphaPreMultipliedBit,
-		vulkan.CompositeAlphaPostMultipliedBit,
-		vulkan.CompositeAlphaInheritBit,
+	compositeAlphaFlags := []vk.CompositeAlphaFlagBitsKHR{
+		vk.COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		vk.COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+		vk.COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+		vk.COMPOSITE_ALPHA_INHERIT_BIT_KHR,
 	}
 	for _, compositeAlphaFlag := range compositeAlphaFlags {
-		if (surfaceCaps.SupportedCompositeAlpha & vulkan.CompositeAlphaFlags(compositeAlphaFlag)) != 0 {
+		if (surfaceCaps.SupportedCompositeAlpha & compositeAlphaFlag) != 0 {
 			compositeAlpha = compositeAlphaFlag
 			break
 		}
 	}
 
 	// Find supported color format
-	var formatCount uint32
-	res = vulkan.GetPhysicalDeviceSurfaceFormats(physicalDevice, surface, &formatCount, nil)
-	if res != vulkan.Success && formatCount == 0 {
-		return fmt.Errorf("failed to get swapchain format count")
-	}
-
-	surfaceFormats := make([]vulkan.SurfaceFormat, formatCount)
-	res = vulkan.GetPhysicalDeviceSurfaceFormats(physicalDevice, surface, &formatCount, surfaceFormats)
-	if res != vulkan.Success && formatCount == 0 {
+	surfaceFormats, err := vk.GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface)
+	if err != nil {
 		return fmt.Errorf("failed to get swapchain formats")
 	}
 
 	selectedFormat := surfaceFormats[0]
-	preferredImageFormats := []vulkan.Format{
-		vulkan.FormatB8g8r8a8Unorm,
-		vulkan.FormatR8g8b8a8Unorm,
-		vulkan.FormatA8b8g8r8UnormPack32,
+	preferredImageFormats := []vk.Format{
+		vk.FORMAT_B8G8R8A8_UNORM,
+		vk.FORMAT_R8G8B8A8_UNORM,
+		vk.FORMAT_A8B8G8R8_SRGB_PACK32,
 	}
-	preferredMap := make(map[vulkan.Format]bool)
+	preferredMap := make(map[vk.Format]bool)
 	for _, format := range preferredImageFormats {
 		preferredMap[format] = true
 	}
@@ -142,67 +121,59 @@ func (sc *SwapChain) Create(
 
 	sc.surfaceFormat = selectedFormat
 
-	swapchainCreateInfo := vulkan.SwapchainCreateInfo{
-		SType:                 vulkan.StructureTypeSwapchainCreateInfo,
-		Surface:               surface,
-		MinImageCount:         desiredNumberOfSwapchainImages,
-		ImageFormat:           selectedFormat.Format,
-		ImageColorSpace:       selectedFormat.ColorSpace,
-		ImageExtent:           swapchainExtent,
-		ImageArrayLayers:      1,
-		ImageUsage:            vulkan.ImageUsageFlags(vulkan.ImageUsageColorAttachmentBit | vulkan.ImageUsageTransferSrcBit | vulkan.ImageUsageTransferDstBit),
-		ImageSharingMode:      vulkan.SharingModeExclusive,
-		QueueFamilyIndexCount: 0,
-		PreTransform:          preTransform,
-		CompositeAlpha:        compositeAlpha,
-		PresentMode:           swapchainPresentMode,
-		Clipped:               vulkan.True, // Setting clipped to VK_TRUE allows the implementation to discard rendering outside of the surface area
-		OldSwapchain:          oldSwapChain,
+	swapchainCreateInfo := vk.SwapchainCreateInfoKHR{
+		Surface:          surface,
+		MinImageCount:    desiredNumberOfSwapchainImages,
+		ImageFormat:      selectedFormat.Format,
+		ImageColorSpace:  selectedFormat.ColorSpace,
+		ImageExtent:      swapchainExtent,
+		ImageArrayLayers: 1,
+		ImageUsage:       vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.IMAGE_USAGE_TRANSFER_SRC_BIT | vk.IMAGE_USAGE_TRANSFER_DST_BIT,
+		ImageSharingMode: vk.SHARING_MODE_EXCLUSIVE,
+		PreTransform:     preTransform,
+		CompositeAlpha:   compositeAlpha,
+		PresentMode:      swapchainPresentMode,
+		Clipped:          true, // Setting clipped to VK_TRUE allows the implementation to discard rendering outside of the surface area
+		OldSwapchain:     oldSwapChain,
 	}
 
-	var swapchainHandle vulkan.Swapchain
-
-	res = vulkan.CreateSwapchain(device, &swapchainCreateInfo, nil, &swapchainHandle)
-	if res != vulkan.Success {
+	swapchainHandle, err := vk.CreateSwapchainKHR(device, &swapchainCreateInfo, nil)
+	if err != nil {
 		return fmt.Errorf("failed to create swapchain")
 	}
 	sc.swapChain = swapchainHandle
 
 	// If an existing swap chain is re-created, destroy the old swap chain and the resources owned by the application (image views, images are owned by the swap chain)
-	if oldSwapChain != vulkan.NullSwapchain {
+	if oldSwapChain != vk.SwapchainKHR(vk.NULL_HANDLE) {
 		for i := range len(sc.images) {
-			vulkan.DestroyImageView(device, sc.views[i], nil)
+			vk.DestroyImageView(device, sc.views[i], nil)
 		}
-		vulkan.DestroySwapchain(device, oldSwapChain, nil)
+		vk.DestroySwapchainKHR(device, oldSwapChain, nil)
 	}
 
-	// Get the (new) swap chain images
-	imageCount := uint32(len(sc.images))
-	res = vulkan.GetSwapchainImages(device, sc.swapChain, &imageCount, nil)
-	if res != vulkan.Success {
-		return fmt.Errorf("failed to get swapchain image count")
+	swapchainImages, err := vk.GetSwapchainImagesKHR(device, sc.swapChain)
+	if err != nil {
+		return fmt.Errorf("failed to get swapchain images")
 	}
-	newImages := make([]vulkan.Image, imageCount)
-	copy(newImages, sc.images)
-	sc.images = newImages
-	res = vulkan.GetSwapchainImages(device, sc.swapChain, &imageCount, sc.images)
-	if res != vulkan.Success {
-		return fmt.Errorf("failed to get swapchain image count")
-	}
+	sc.images = swapchainImages
 
 	// Get the swap chain buffers containing the image and imageview
-	newImageViews := make([]vulkan.ImageView, imageCount)
+	newImageViews := make([]vk.ImageView, len(sc.images))
 	copy(newImageViews, sc.views)
 	sc.views = newImageViews
 	for i := range len(sc.images) {
-		colorAttachmentView := vulkan.ImageViewCreateInfo{
-			SType:      vulkan.StructureTypeImageViewCreateInfo,
-			Image:      sc.images[i],
-			ViewType:   vulkan.ImageViewType2d,
-			Format:     sc.surfaceFormat.Format,
-			Components: vulkan.ComponentMapping{R: vulkan.ComponentSwizzleR, G: vulkan.ComponentSwizzleG, B: vulkan.ComponentSwizzleB, A: vulkan.ComponentSwizzleA},
-			SubresourceRange: vulkan.ImageSubresourceRange{
-				AspectMask:     vulkan.ImageAspectFlags(vulkan.ImageAspectColorBit),
+		colorAttachmentView := vk.ImageViewCreateInfo{
+			Image:    sc.images[i],
+			ViewType: vk.IMAGE_VIEW_TYPE_2D,
+			Format:   sc.surfaceFormat.Format,
+			Components: vk.ComponentMapping{
+				R: vk.COMPONENT_SWIZZLE_R,
+				G: vk.COMPONENT_SWIZZLE_G,
+				B: vk.COMPONENT_SWIZZLE_B,
+				A: vk.COMPONENT_SWIZZLE_A,
+			},
+			SubresourceRange: vk.ImageSubresourceRange{
+				AspectMask:     vk.IMAGE_ASPECT_COLOR_BIT,
 				BaseMipLevel:   0,
 				LevelCount:     1,
 				BaseArrayLayer: 0,
@@ -210,28 +181,29 @@ func (sc *SwapChain) Create(
 			},
 		}
 
-		res = vulkan.CreateImageView(device, &colorAttachmentView, nil, &sc.views[i])
-		if res != vulkan.Success {
+		imageView, err := vk.CreateImageView(device, &colorAttachmentView, nil)
+		if err != nil {
 			return fmt.Errorf("failed to create swapchain image view")
 		}
+		sc.views[i] = imageView
 	}
 
 	return nil
 }
 
 func (sc *SwapChain) Destroy() {
-	if sc.swapChain != vulkan.NullSwapchain {
+	if sc.swapChain != vk.SwapchainKHR(vk.NULL_HANDLE) {
 		for i := range len(sc.images) {
-			vulkan.DestroyImageView(sc.device, sc.views[i], nil)
+			vk.DestroyImageView(sc.device, sc.views[i], nil)
 		}
-		vulkan.DestroySwapchain(sc.device, sc.swapChain, nil)
+		vk.DestroySwapchainKHR(sc.device, sc.swapChain, nil)
 	}
 
-	sc.swapChain = vulkan.NullSwapchain
+	sc.swapChain = vk.SwapchainKHR(vk.NULL_HANDLE)
 }
 
-func (sc *SwapChain) AcquireNextImage(presentCompleteSemaphore vulkan.Semaphore, imageIndex *uint32) vulkan.Result {
+func (sc *SwapChain) AcquireNextImage(presentCompleteSemaphore vk.Semaphore) (uint32, error) {
 	// By setting timeout to UINT64_MAX we will always wait until the next image has been acquired or an actual error is thrown
 	// With that we don't have to handle VK_NOT_READY
-	return vulkan.AcquireNextImage(sc.device, sc.swapChain, math.MaxUint64, presentCompleteSemaphore, nil, imageIndex)
+	return vk.AcquireNextImageKHR(sc.device, sc.swapChain, math.MaxUint64, presentCompleteSemaphore, vk.Fence(vk.NULL_HANDLE))
 }
