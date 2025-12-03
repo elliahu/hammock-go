@@ -6,8 +6,8 @@ import (
 
 // Vulkan context
 type Context struct {
-	surface                  vulkan.Surface // Vulkan rendering surface (may be nil for headless mode)
-	instance                 *Instance
+	surface                  vulkan.Surface        // Vulkan rendering surface (may be nil for headless mode)
+	instance                 Instance              // Vulkan Instance
 	physicalDevice           vulkan.PhysicalDevice // Physical device
 	device                   vulkan.Device         // Logical vulkan device
 	presentQueueFamilyIndex  QueueFamilyIndex      // Present queue family index
@@ -23,16 +23,17 @@ type Context struct {
 	transferQueue            vulkan.Queue          // Transfer queue
 }
 
-func CreateContext(instance *Instance, surface vulkan.Surface) (*Context, error) {
+// Creates vulkan context
+func CreateContext(instance Instance, surface vulkan.Surface) (Context, error) {
 	// First set the surface
-	ctx := &Context{}
+	ctx := Context{}
 	ctx.surface = surface
 	ctx.instance = instance
 
 	// Create physical device
 	physicalDevice, err := PickPhysicalDevice(ctx.instance.instance)
 	if err != nil {
-		return nil, err
+		return ctx, err
 	}
 	ctx.physicalDevice = physicalDevice
 
@@ -46,7 +47,7 @@ func CreateContext(instance *Instance, surface vulkan.Surface) (*Context, error)
 	device, presentQueue, graphicsQueue, computeQueue, transferQueue, err := CreateDevice(physicalDevice, ctx.presentQueueFamilyIndex,
 		ctx.graphicsQueueFamilyIndex, ctx.computeQueueFamilyIndex, ctx.transferQueueFamilyIndex)
 	if err != nil {
-		return nil, err
+		return ctx, err
 	}
 
 	ctx.device = device
@@ -59,7 +60,7 @@ func CreateContext(instance *Instance, surface vulkan.Surface) (*Context, error)
 	graphicsCommandPool, computeCommandPool, transferCommandPool, err := CreateCommandPools(device, ctx.graphicsQueueFamilyIndex,
 		ctx.computeQueueFamilyIndex, ctx.transferQueueFamilyIndex)
 	if err != nil {
-		return nil, err
+		return ctx, err
 	}
 
 	ctx.graphicsCommandPool = graphicsCommandPool
@@ -74,4 +75,12 @@ func (ctx *Context) Destroy() {
 	DestroyCommandPools(ctx.device, ctx.graphicsCommandPool, ctx.computeCommandPool, ctx.transferCommandPool)
 	DestroyDevice(ctx.device)
 	ctx.instance.Destroy()
+}
+
+func (ctx *Context) GetPhysicalDevice() vulkan.PhysicalDevice {
+	return ctx.physicalDevice
+}
+
+func (ctx *Context) GetDevice() vulkan.Device {
+	return ctx.device
 }

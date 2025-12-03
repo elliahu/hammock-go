@@ -142,13 +142,13 @@ func destroyInstance(instance vulkan.Instance) {
 	}
 }
 
-func CreateInstance() (*Instance, error) {
-	vulkanInstance := &Instance{}
+func CreateInstance() (Instance, error) {
+	vulkanInstance := Instance{}
 
 	// Create Vulkan instance
 	instance, err := createInstance()
 	if err != nil {
-		return nil, err
+		return vulkanInstance, err
 	}
 
 	vulkanInstance.instance = instance
@@ -156,7 +156,7 @@ func CreateInstance() (*Instance, error) {
 	// Create debug messenger
 	debugCallback, err := createDebugCallback(instance)
 	if err != nil {
-		return nil, err
+		return vulkanInstance, err
 	}
 
 	vulkanInstance.debugCallback = debugCallback

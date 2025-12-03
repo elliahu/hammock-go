@@ -10,11 +10,12 @@ import (
 )
 
 type Editor struct {
-	window   *glfw.Window
-	surface  vulkan.Surface
-	instance *core.Instance
-	context  *core.Context
-	renderer *renderer.Renderer
+	window    *glfw.Window
+	surface   vulkan.Surface
+	instance  core.Instance
+	context   core.Context
+	renderer  renderer.Renderer
+	swapchain core.SwapChain
 }
 
 func (edit *Editor) mainLoop() {
@@ -46,13 +47,12 @@ func createWindowAndSurface(editor *Editor) error {
 	return nil
 }
 
-func CreateEditor() (*Editor, error) {
-	editor := &Editor{}
+func (editor *Editor) Create() error {
 
 	// Create instance
 	instance, err := core.CreateInstance()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create instance")
+		return fmt.Errorf("failed to create instance")
 	}
 	editor.instance = instance
 
@@ -60,12 +60,18 @@ func CreateEditor() (*Editor, error) {
 	createWindowAndSurface(editor)
 
 	// Create context
-	core.CreateContext(editor.instance, editor.surface)
+	editor.context, err = core.CreateContext(editor.instance, editor.surface)
+	if err != nil {
+		return fmt.Errorf("failed to create context")
+	}
 
 	// Create renderer
-	editor.renderer = renderer.CreateRenderer(editor.context)
+	editor.renderer = renderer.CreateRenderer(&editor.context)
 
-	return editor, nil
+	// Create swapchain
+	editor.swapchain.Create(instance.Instance(), editor.context.GetPhysicalDevice(), editor.surface, editor.context.GetDevice(), 1920, 1080, false)
+
+	return nil
 }
 
 func (edit *Editor) Run() {

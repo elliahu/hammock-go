@@ -12,7 +12,8 @@ func init() {
 }
 
 func main() {
-	editor, err := editor.CreateEditor()
+	var editor editor.Editor
+	err := editor.Create()
 	if err != nil {
 		panic(err)
 	}
