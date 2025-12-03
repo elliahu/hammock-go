@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"hammock-go/core"
 	"hammock-go/renderer"
 
@@ -17,7 +18,10 @@ type Editor struct {
 }
 
 func (edit *Editor) mainLoop() {
-
+	err := edit.renderer.RenderFrame()
+	if err != nil {
+		panic(fmt.Sprintf("failed to draw frame: %s", err))
+	}
 }
 
 func (editor *Editor) Create() error {

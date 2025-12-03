@@ -12,3 +12,7 @@ func CreateRenderer(context *core.Context) Renderer {
 
 	return renderer
 }
+
+func (r *Renderer) RenderFrame() error {
+	return nil
+}
