@@ -5,13 +5,11 @@ import (
 	"runtime"
 )
 
-func init() {
-	// This is needed to arrange that main() runs on main thread.
-	// See documentation for functions that are only allowed to be called from the main thread.
-	runtime.LockOSThread()
-}
-
 func main() {
+	// Lock to OS thread for Vulkan and Win32
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	var editor editor.Editor
 	err := editor.Create()
 	if err != nil {
